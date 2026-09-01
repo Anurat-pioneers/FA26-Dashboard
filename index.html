@@ -209,33 +209,43 @@
     return rangeFmt;
   }
 
-  document.getElementById('week-range').textContent = formatMondayFriday();
+  var REFRESH_MS = 5 * 60 * 1000; // auto-refresh every 5 minutes
 
-  fetch('/api/dashboard')
-    .then(function (r) {
-      if (!r.ok) return r.json().then(function (e) { throw new Error(e.error || 'Request failed'); });
-      return r.json();
-    })
-    .then(function (data) {
-      document.getElementById('v-new').textContent = data.newThisWeek;
-      document.getElementById('v-review').textContent = data.leftToReview;
-      document.getElementById('v-up1').textContent = data.upcoming1st;
-      document.getElementById('v-up2').textContent = data.upcoming2nd;
-      document.getElementById('v-post2').textContent = data.post2ndDecide;
-      document.getElementById('v-accept').textContent = data.toAccept;
-      document.getElementById('v-reject').textContent = data.toReject;
+  function loadDashboard() {
+    document.getElementById('week-range').textContent = formatMondayFriday();
 
-      var updated = new Date(data.updatedAt);
-      document.getElementById('updated-label').textContent =
-        'Last updated ' + updated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) +
-        ' · ' + updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    })
-    .catch(function (err) {
-      var banner = document.getElementById('error-banner');
-      banner.style.display = 'block';
-      banner.textContent = 'Could not load live data: ' + err.message;
-      document.getElementById('updated-label').textContent = 'Load failed';
-    });
+    fetch('/api/dashboard')
+      .then(function (r) {
+        if (!r.ok) return r.json().then(function (e) { throw new Error(e.error || 'Request failed'); });
+        return r.json();
+      })
+      .then(function (data) {
+        document.getElementById('v-new').textContent = data.newThisWeek;
+        document.getElementById('v-review').textContent = data.leftToReview;
+        document.getElementById('v-up1').textContent = data.upcoming1st;
+        document.getElementById('v-up2').textContent = data.upcoming2nd;
+        document.getElementById('v-post2').textContent = data.post2ndDecide;
+        document.getElementById('v-accept').textContent = data.toAccept;
+        document.getElementById('v-reject').textContent = data.toReject;
+
+        var banner = document.getElementById('error-banner');
+        banner.style.display = 'none';
+
+        var updated = new Date(data.updatedAt);
+        document.getElementById('updated-label').textContent =
+          'Last updated ' + updated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) +
+          ' · ' + updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      })
+      .catch(function (err) {
+        var banner = document.getElementById('error-banner');
+        banner.style.display = 'block';
+        banner.textContent = 'Could not load live data: ' + err.message;
+        document.getElementById('updated-label').textContent = 'Load failed';
+      });
+  }
+
+  loadDashboard();
+  setInterval(loadDashboard, REFRESH_MS);
 </script>
 </body>
 </html>

@@ -55,8 +55,8 @@ async function countRecords(viewId, filterByFormula) {
   return count;
 }
 
-// Monday 00:00 of the current week, in Europe/Paris local time, as an ISO string.
-function mondayOfThisWeekISO() {
+// Monday 00:00 of the current week, in Europe/Paris local time, as a Date object.
+function mondayOfThisWeek() {
   const now = new Date();
   const parisNow = new Date(
     now.toLocaleString('en-US', { timeZone: 'Europe/Paris' })
@@ -66,13 +66,29 @@ function mondayOfThisWeekISO() {
   const monday = new Date(parisNow);
   monday.setDate(parisNow.getDate() + diffToMonday);
   monday.setHours(0, 0, 0, 0);
-  return monday.toISOString().slice(0, 19); // "YYYY-MM-DDTHH:MM:SS"
+  return monday;
+}
+
+// Formats a Date as the "YYYY-MM-DDTHH:MM:SS" string Airtable's DATETIME_PARSE expects.
+function toAirtableISO(date) {
+  return date.toISOString().slice(0, 19);
 }
 
 module.exports = async (req, res) => {
   try {
-    const mondayISO = mondayOfThisWeekISO();
+    const monday = mondayOfThisWeek();
+    const mondayISO = toAirtableISO(monday);
+
+    const lastMonday = new Date(monday);
+    lastMonday.setDate(monday.getDate() - 7);
+    const lastMondayISO = toAirtableISO(lastMonday);
+
     const newThisWeekFormula = `IS_AFTER({${CREATED_TIME_FIELD}}, DATETIME_PARSE("${mondayISO}", "YYYY-MM-DDTHH:mm:ss"))`;
+
+    // Applications created during the previous Monday–Sunday window, for the
+    // "vs __ last week" comparison — so Monday mornings (when "this week" is
+    // always 0 or close to it) still show useful context.
+    const lastWeekFormula = `AND(IS_AFTER({${CREATED_TIME_FIELD}}, DATETIME_PARSE("${lastMondayISO}", "YYYY-MM-DDTHH:mm:ss")), IS_BEFORE({${CREATED_TIME_FIELD}}, DATETIME_PARSE("${mondayISO}", "YYYY-MM-DDTHH:mm:ss")))`;
 
     // "Left to review" isn't pulled from the "Applications to review FA26" view —
     // that view turned out to include more than intended (153 vs. a hand-verified 100).
@@ -83,6 +99,7 @@ module.exports = async (req, res) => {
 
     const [
       newThisWeek,
+      lastWeek,
       leftToReview,
       upcoming1st,
       upcoming2nd,
@@ -91,6 +108,7 @@ module.exports = async (req, res) => {
       toReject,
     ] = await Promise.all([
       countRecords(VIEWS.allFA26, newThisWeekFormula),
+      countRecords(VIEWS.allFA26, lastWeekFormula),
       countRecords(VIEWS.allFA26, leftToReviewFormula),
       countRecords(VIEWS.upcoming1st),
       countRecords(VIEWS.upcoming2nd),
@@ -102,6 +120,7 @@ module.exports = async (req, res) => {
     res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
     res.status(200).json({
       newThisWeek,
+      lastWeek,
       leftToReview,
       upcoming1st,
       upcoming2nd,

@@ -154,6 +154,7 @@
         <div class="label"><span class="swatch" style="background:var(--accent-aqua);"></span>New applications this week</div>
         <div class="value" id="v-new">&mdash;</div>
         <div class="note" id="week-range">&mdash;</div>
+        <div class="note" id="last-week-note">&mdash;</div>
       </div>
 
       <div class="tile" style="background:var(--tile-warn-bg);border-top-color:var(--accent-orange);">
@@ -194,12 +195,18 @@
   </div>
 
 <script>
-  function formatMondayFriday() {
+  function mondayOfThisWeek() {
     var now = new Date();
     var day = now.getDay();
     var diffToMonday = (day === 0 ? -6 : 1 - day);
     var monday = new Date(now);
     monday.setDate(now.getDate() + diffToMonday);
+    return monday;
+  }
+
+  function formatMondayFriday() {
+    var now = new Date();
+    var monday = mondayOfThisWeek();
     var friday = new Date(monday);
     friday.setDate(monday.getDate() + 4);
     var opts = { month: 'short', day: 'numeric', year: 'numeric' };
@@ -207,6 +214,20 @@
       ' – ' + friday.toLocaleDateString('en-US', opts);
     if (now < friday) { rangeFmt += ' (so far)'; }
     return rangeFmt;
+  }
+
+  // Short "Aug 31–Sep 4" style label for the previous Monday–Friday, used in
+  // the "vs __ last week" note so Monday mornings (when this week is always
+  // near 0) still show useful context.
+  function formatLastWeekMondayFriday() {
+    var thisMonday = mondayOfThisWeek();
+    var lastMonday = new Date(thisMonday);
+    lastMonday.setDate(thisMonday.getDate() - 7);
+    var lastFriday = new Date(lastMonday);
+    lastFriday.setDate(lastMonday.getDate() + 4);
+    var opts = { month: 'short', day: 'numeric' };
+    return lastMonday.toLocaleDateString('en-US', opts) +
+      '–' + lastFriday.toLocaleDateString('en-US', opts);
   }
 
   var REFRESH_MS = 5 * 60 * 1000; // auto-refresh every 5 minutes
@@ -221,6 +242,8 @@
       })
       .then(function (data) {
         document.getElementById('v-new').textContent = data.newThisWeek;
+        document.getElementById('last-week-note').textContent =
+          'vs ' + data.lastWeek + ' last week (' + formatLastWeekMondayFriday() + ')';
         document.getElementById('v-review').textContent = data.leftToReview;
         document.getElementById('v-up1').textContent = data.upcoming1st;
         document.getElementById('v-up2').textContent = data.upcoming2nd;

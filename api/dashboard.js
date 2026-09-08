@@ -21,6 +21,7 @@ const VIEWS = {
 
 const CREATED_TIME_FIELD = 'created_time';
 const ANURATS_CALL_FIELD = "Anurat's Call";
+const FINAL_STATUS_FIELD = 'Final Status';
 
 async function countRecords(viewId, filterByFormula) {
   const token = process.env.AIRTABLE_TOKEN;
@@ -95,7 +96,14 @@ module.exports = async (req, res) => {
     // Instead we replicate the verified logic directly: Anurat's Call is empty or
     // "Review", restricted to the same FA26 scope as "All applications FA26"
     // (the same scope that correctly gave 1 for "new this week").
-    const leftToReviewFormula = `OR({${ANURATS_CALL_FIELD}} = "", {${ANURATS_CALL_FIELD}} = "Review")`;
+    //
+    // Also require Final Status to be blank. Older records from before the
+    // "Anurat's Call" field existed can have a Final Status already set
+    // (Declined, Onboarded, Waitlist, etc.) but no Anurat's Call value —
+    // without this check they get miscounted as still needing review even
+    // though they were already decided (this was inflating the count vs.
+    // Anurat's hand count).
+    const leftToReviewFormula = `AND(OR({${ANURATS_CALL_FIELD}} = "", {${ANURATS_CALL_FIELD}} = "Review"), {${FINAL_STATUS_FIELD}} = "")`;
 
     const [
       newThisWeek,

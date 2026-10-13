@@ -22,6 +22,7 @@ const VIEWS = {
 const CREATED_TIME_FIELD = 'created_time';
 const ANURATS_CALL_FIELD = "Anurat's Call";
 const FINAL_STATUS_FIELD = 'Final Status';
+const FIRST_MEETING_STATUS_FIELD = '1st Meeting Status';
 
 // Fields used to put names (and a LinkedIn link) on the person-level tiles.
 const FIRST_NAME_FIELD = 'first_name';
@@ -154,7 +155,14 @@ module.exports = async (req, res) => {
     // without this check they get miscounted as still needing review even
     // though they were already decided (this was inflating the count vs.
     // Anurat's hand count).
-    const leftToReviewFormula = `AND(OR({${ANURATS_CALL_FIELD}} = "", {${ANURATS_CALL_FIELD}} = "Review"), {${FINAL_STATUS_FIELD}} = "")`;
+    //
+    // And require 1st Meeting Status to be blank. Final Status is only set at
+    // the very end of the funnel, so someone who has already had their first
+    // call — done, no show, no response, followed up — and is now sitting with
+    // Maxime still has a blank Final Status. Without this check they reappear
+    // in the review queue every time the Anurat's Call tag is left unset after
+    // a call, which is what built up a backlog of 11 stale records.
+    const leftToReviewFormula = `AND(OR({${ANURATS_CALL_FIELD}} = "", {${ANURATS_CALL_FIELD}} = "Review"), {${FINAL_STATUS_FIELD}} = "", {${FIRST_MEETING_STATUS_FIELD}} = "")`;
 
     const [
       newThisWeek,

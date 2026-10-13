@@ -26,6 +26,7 @@
     --tile-critical-bg: #fceeee;
     --tile-aqua-bg:     #e9f9f2;
     --tile-warn-bg:     #fdf1e8;
+    --hairline:       rgba(11,11,11,0.07);
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -49,6 +50,7 @@
       --tile-critical-bg: #2a1c1c;
       --tile-aqua-bg:     #12241c;
       --tile-warn-bg:     #2a2016;
+      --hairline:       rgba(255,255,255,0.09);
     }
   }
 
@@ -116,6 +118,53 @@
     flex: none;
   }
 
+  /* Names behind a tile's number */
+  .people {
+    margin-top: 14px;
+    border-top: 1px solid var(--hairline);
+    padding-top: 10px;
+  }
+  .people:empty { display: none; }
+
+  .person {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 3px 0;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .person .who {
+    color: var(--text-primary);
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  a.who:hover { text-decoration: underline; }
+
+  .person .when {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    flex: none;
+  }
+
+  .more {
+    margin-top: 6px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-muted);
+    font-size: 11.5px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .more:hover { color: var(--text-secondary); }
+
   footer {
     margin-top: 32px;
     padding-top: 14px;
@@ -166,21 +215,25 @@
       <div class="tile" style="border-top-color:var(--seq-350);">
         <div class="label">Upcoming 1st interview</div>
         <div class="value" id="v-up1">&mdash;</div>
+        <div class="people" id="p-up1"></div>
       </div>
 
       <div class="tile" style="border-top-color:var(--seq-450);">
         <div class="label">Upcoming 2nd interview</div>
         <div class="value" id="v-up2">&mdash;</div>
+        <div class="people" id="p-up2"></div>
       </div>
 
       <div class="tile" style="border-top-color:var(--seq-550);">
         <div class="label">Post 2nd interview &mdash; to decide</div>
         <div class="value" id="v-post2">&mdash;</div>
+        <div class="people" id="p-post2"></div>
       </div>
 
       <div class="tile" style="background:var(--tile-good-bg);border-top-color:var(--status-good);">
         <div class="label"><span class="swatch" style="background:var(--status-good);"></span>To accept</div>
         <div class="value" id="v-accept">&mdash;</div>
+        <div class="people" id="p-accept"></div>
       </div>
 
       <div class="tile" style="background:var(--tile-critical-bg);border-top-color:var(--status-critical);">
@@ -195,6 +248,9 @@
   </div>
 
 <script>
+  var VISIBLE_NAMES = 4;          // names shown before the "+N more" toggle
+  var REFRESH_MS = 5 * 60 * 1000; // auto-refresh every 5 minutes
+
   function mondayOfThisWeek() {
     var now = new Date();
     var day = now.getDay();
@@ -230,7 +286,89 @@
       '–' + lastFriday.toLocaleDateString('en-US', opts);
   }
 
-  var REFRESH_MS = 5 * 60 * 1000; // auto-refresh every 5 minutes
+  // "Today 17:00", "Tomorrow 09:30", otherwise "Wed 15 Oct, 09:30" — all in
+  // Paris time, since that's the time everyone books against.
+  function formatWhen(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d)) return '';
+
+    var tz = { timeZone: 'Europe/Paris' };
+    function parisDayKey(date) {
+      return date.toLocaleDateString('en-CA', tz); // YYYY-MM-DD
+    }
+
+    var now = new Date();
+    var tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    var time = d.toLocaleTimeString('en-GB', {
+      timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit'
+    });
+
+    if (parisDayKey(d) === parisDayKey(now)) return 'Today ' + time;
+    if (parisDayKey(d) === parisDayKey(tomorrow)) return 'Tomorrow ' + time;
+
+    var day = d.toLocaleDateString('en-GB', {
+      timeZone: 'Europe/Paris', weekday: 'short', day: 'numeric', month: 'short'
+    });
+    return day + ', ' + time;
+  }
+
+  // Renders a list of people into a tile. Shows VISIBLE_NAMES, then a
+  // "+N more" button that expands the rest in place.
+  function renderPeople(containerId, list) {
+    var box = document.getElementById(containerId);
+    if (!box) return;
+    box.innerHTML = '';
+    if (!list || !list.length) return;
+
+    var expanded = false;
+
+    function row(person) {
+      var el = document.createElement('div');
+      el.className = 'person';
+
+      var who;
+      if (person.linkedin) {
+        who = document.createElement('a');
+        who.className = 'who';
+        who.href = person.linkedin;
+        who.target = '_blank';
+        who.rel = 'noopener noreferrer';
+      } else {
+        who = document.createElement('span');
+        who.className = 'who';
+      }
+      who.textContent = person.name;
+      el.appendChild(who);
+
+      var when = formatWhen(person.when);
+      if (when) {
+        var w = document.createElement('span');
+        w.className = 'when';
+        w.textContent = when;
+        el.appendChild(w);
+      }
+      return el;
+    }
+
+    function draw() {
+      box.innerHTML = '';
+      var shown = expanded ? list : list.slice(0, VISIBLE_NAMES);
+      shown.forEach(function (p) { box.appendChild(row(p)); });
+
+      var hidden = list.length - VISIBLE_NAMES;
+      if (hidden > 0) {
+        var btn = document.createElement('button');
+        btn.className = 'more';
+        btn.type = 'button';
+        btn.textContent = expanded ? 'show less' : '+' + hidden + ' more';
+        btn.addEventListener('click', function () { expanded = !expanded; draw(); });
+        box.appendChild(btn);
+      }
+    }
+
+    draw();
+  }
 
   function loadDashboard() {
     document.getElementById('week-range').textContent = formatMondayFriday();
@@ -250,6 +388,12 @@
         document.getElementById('v-post2').textContent = data.post2ndDecide;
         document.getElementById('v-accept').textContent = data.toAccept;
         document.getElementById('v-reject').textContent = data.toReject;
+
+        var people = data.people || {};
+        renderPeople('p-up1', people.upcoming1st);
+        renderPeople('p-up2', people.upcoming2nd);
+        renderPeople('p-post2', people.post2ndDecide);
+        renderPeople('p-accept', people.toAccept);
 
         var banner = document.getElementById('error-banner');
         banner.style.display = 'none';

@@ -130,31 +130,29 @@
   }
   .people:empty { display: none; }
 
+  /* The name gets the full width of the tile and the time sits under it.
+     These tiles are narrow once embedded in Notion, and putting both on one
+     line squeezed names down to "Lour…" while the time kept its full width. */
   .person {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 3px 0;
+    padding: 4px 0;
     font-size: 12px;
     line-height: 1.35;
   }
 
   .person .who {
+    display: block;
     color: var(--text-primary);
     text-decoration: none;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
   }
   a.who:hover { text-decoration: underline; }
 
   .person .when {
+    display: block;
     color: var(--text-muted);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    flex: none;
+    margin-top: 1px;
   }
 
   .more {
@@ -313,7 +311,7 @@
     if (parisDayKey(d) === parisDayKey(tomorrow)) return 'Tomorrow ' + time;
 
     var day = d.toLocaleDateString('en-GB', {
-      timeZone: 'Europe/Paris', weekday: 'short', day: 'numeric', month: 'short'
+      timeZone: 'Europe/Paris', day: 'numeric', month: 'short'
     });
     return day + ', ' + time;
   }

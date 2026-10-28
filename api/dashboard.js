@@ -7,27 +7,30 @@ const TABLE_ID = 'tbl7uQu7o1FyI1tPT';
 
 // These are real, curated Airtable views (Data tab of the Dealflow base) —
 // each one already encodes the exact business logic Anurat's team uses for that stage.
-// If the team changes what counts as e.g. "To reject" in Airtable, this dashboard
-// picks it up automatically — no code change needed.
+// If the team changes what counts as e.g. "upcoming 2nd interview" in Airtable,
+// this dashboard picks it up automatically — no code change needed.
+//
+// Two tiles deliberately do NOT come from a view: "Left to review" and
+// "Accepted" / "Waitlisted". See the formulas further down for why.
 const VIEWS = {
   allFA26: 'viwgahGy9wonT8DGU',        // All applications FA26
-  leftToReview: 'viwKvbGbwUfnu1l1I',   // Applications to review FA26
-  upcoming1st: 'viwNlqPAz0DBhh7IK',    // Upcoming 1st interview
-  upcoming2nd: 'viw0FBP0wR5GQZgnx',    // Upcoming 2nd Interview
-  post2ndDecide: 'viw9tADrsekv31Lgc',  // Post 2nd Interview to Decide
-  toAccept: 'viw37vqR6NT3E96Wh',       // To accept
-  toReject: 'viwNYs3TmY1Wh7wrx',       // To reject
+  upcoming1st: 'viwNlqPAz0DBhh7IK',    // 1st interview - booked
+  upcoming2nd: 'viw0FBP0wR5GQZgnx',    // 2nd Interview - upcoming
+  post2ndDecide: 'viw9tADrsekv31Lgc',  // 2nd Interview - to decide
 };
 
 const CREATED_TIME_FIELD = 'created_time';
 const ANURATS_CALL_FIELD = "Anurat's Call";
 const FINAL_STATUS_FIELD = 'Final Status';
 const FIRST_MEETING_STATUS_FIELD = '1st Meeting Status';
+const SENT_ACCEPTANCE_FIELD = 'Sent Acceptance';
+const STATUS_MAXIME_FIELD = 'Status Maxime';
 
 // Fields used to put names (and a LinkedIn link) on the person-level tiles.
 const FIRST_NAME_FIELD = 'first_name';
 const LAST_NAME_FIELD = 'Last Name';
 const LINKEDIN_FIELD = 'LinkedIn';
+const ELO_FIELD = 'Elo Score';
 const FIRST_INTERVIEW_FIELD = '1st interview date & time';
 const SECOND_INTERVIEW_FIELD = '2nd interview date & time';
 
@@ -93,7 +96,9 @@ function normaliseLinkedIn(value) {
 }
 
 // Reduces raw Airtable records to the small shape the front end renders.
-function toPeople(records, dateField) {
+// `dateField` puts a scheduled time on the row (interview tiles); `withElo`
+// puts the Elo score there instead (the waitlist, which is worked in rank order).
+function toPeople(records, dateField, withElo) {
   return records.map(function (r) {
     const f = r.fields || {};
     const name = [f[FIRST_NAME_FIELD], f[LAST_NAME_FIELD]]
@@ -104,8 +109,14 @@ function toPeople(records, dateField) {
       name: name || 'Unnamed',
       linkedin: normaliseLinkedIn(f[LINKEDIN_FIELD]),
       when: dateField ? (f[dateField] || null) : null,
+      elo: withElo ? (f[ELO_FIELD] !== undefined ? f[ELO_FIELD] : null) : null,
     };
   });
+}
+
+// Alphabetical, for the lists that have no natural order of their own.
+function byName(people) {
+  return people.slice().sort(function (a, b) { return a.name.localeCompare(b.name); });
 }
 
 // Monday 00:00 of the current week, in Europe/Paris local time, as a Date object.
@@ -143,26 +154,25 @@ module.exports = async (req, res) => {
     // always 0 or close to it) still show useful context.
     const lastWeekFormula = `AND(IS_AFTER({${CREATED_TIME_FIELD}}, DATETIME_PARSE("${lastMondayISO}", "YYYY-MM-DDTHH:mm:ss")), IS_BEFORE({${CREATED_TIME_FIELD}}, DATETIME_PARSE("${mondayISO}", "YYYY-MM-DDTHH:mm:ss")))`;
 
-    // "Left to review" isn't pulled from the "Applications to review FA26" view —
-    // that view turned out to include more than intended (153 vs. a hand-verified 100).
-    // Instead we replicate the verified logic directly: Anurat's Call is empty or
-    // "Review", restricted to the same FA26 scope as "All applications FA26"
-    // (the same scope that correctly gave 1 for "new this week").
-    //
-    // Also require Final Status to be blank. Older records from before the
-    // "Anurat's Call" field existed can have a Final Status already set
-    // (Declined, Onboarded, Waitlist, etc.) but no Anurat's Call value —
-    // without this check they get miscounted as still needing review even
-    // though they were already decided (this was inflating the count vs.
-    // Anurat's hand count).
-    //
-    // And require 1st Meeting Status to be blank. Final Status is only set at
-    // the very end of the funnel, so someone who has already had their first
-    // call — done, no show, no response, followed up — and is now sitting with
-    // Maxime still has a blank Final Status. Without this check they reappear
-    // in the review queue every time the Anurat's Call tag is left unset after
-    // a call, which is what built up a backlog of 11 stale records.
+    // "Left to review" is computed here rather than read from the
+    // "To review - Anurat" view, so the number can't drift if someone edits
+    // that view's filters. The logic: nobody has decided anything yet —
+    // Anurat's Call is blank or "Review", no first meeting has happened, and
+    // no final status has been set. Scoped to FA26 by the view it runs against.
     const leftToReviewFormula = `AND(OR({${ANURATS_CALL_FIELD}} = "", {${ANURATS_CALL_FIELD}} = "Review"), {${FINAL_STATUS_FIELD}} = "", {${FIRST_MEETING_STATUS_FIELD}} = "")`;
+
+    // "Accepted" — everyone sent an acceptance who hasn't since dropped out,
+    // whether or not they've finished onboarding. This is the number Maxime
+    // means when he asks "how many do we have".
+    //
+    // Computed rather than read from the "Accepted - onboarding" / "Onboarded"
+    // views because those two scope the batch differently, so the pair would
+    // silently pull in founders from previous cohorts.
+    const acceptedFormula = `AND({${SENT_ACCEPTANCE_FIELD}} = 1, {${STATUS_MAXIME_FIELD}} != "Desist", {${STATUS_MAXIME_FIELD}} != "duplicate", {${FINAL_STATUS_FIELD}} != "Desisted", {${FINAL_STATUS_FIELD}} != "Declined")`;
+
+    // "Waitlisted" — Final Status is Waitlist. Returned ranked by Elo, which
+    // is the order the list actually gets worked through.
+    const waitlistedFormula = `{${FINAL_STATUS_FIELD}} = "Waitlist"`;
 
     const [
       newThisWeek,
@@ -171,8 +181,8 @@ module.exports = async (req, res) => {
       upcoming1stRecords,
       upcoming2ndRecords,
       post2ndDecideRecords,
-      toAcceptRecords,
-      toReject,
+      acceptedRecords,
+      waitlistedRecords,
     ] = await Promise.all([
       countRecords(VIEWS.allFA26, newThisWeekFormula),
       countRecords(VIEWS.allFA26, lastWeekFormula),
@@ -186,8 +196,15 @@ module.exports = async (req, res) => {
         sort: { field: SECOND_INTERVIEW_FIELD, direction: 'asc' },
       }),
       fetchRecords(VIEWS.post2ndDecide, { fields: PERSON_FIELDS }),
-      fetchRecords(VIEWS.toAccept, { fields: PERSON_FIELDS }),
-      countRecords(VIEWS.toReject),
+      fetchRecords(VIEWS.allFA26, {
+        fields: PERSON_FIELDS,
+        filterByFormula: acceptedFormula,
+      }),
+      fetchRecords(VIEWS.allFA26, {
+        fields: PERSON_FIELDS.concat(ELO_FIELD),
+        filterByFormula: waitlistedFormula,
+        sort: { field: ELO_FIELD, direction: 'desc' },
+      }),
     ]);
 
     res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
@@ -198,15 +215,17 @@ module.exports = async (req, res) => {
       upcoming1st: upcoming1stRecords.length,
       upcoming2nd: upcoming2ndRecords.length,
       post2ndDecide: post2ndDecideRecords.length,
-      toAccept: toAcceptRecords.length,
-      toReject,
-      // Names behind the four person-level tiles. Interview tiles carry the
-      // scheduled date so the front end can show it and keep them in order.
+      accepted: acceptedRecords.length,
+      waitlisted: waitlistedRecords.length,
+      // Names behind the person-level tiles. Interview tiles carry the
+      // scheduled date so the front end can show it and keep them in order;
+      // the waitlist carries Elo and comes back ranked.
       people: {
         upcoming1st: toPeople(upcoming1stRecords, FIRST_INTERVIEW_FIELD),
         upcoming2nd: toPeople(upcoming2ndRecords, SECOND_INTERVIEW_FIELD),
-        post2ndDecide: toPeople(post2ndDecideRecords),
-        toAccept: toPeople(toAcceptRecords),
+        post2ndDecide: byName(toPeople(post2ndDecideRecords)),
+        accepted: byName(toPeople(acceptedRecords)),
+        waitlisted: toPeople(waitlistedRecords, null, true),
       },
       updatedAt: new Date().toISOString(),
     });

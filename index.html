@@ -19,6 +19,7 @@
     --status-good:      #0ca30c;
     --status-good-text: #006300;
     --status-critical:  #d03b3b;
+    --status-waitlist:  #d79a4a;
     --seq-350: #5598e7;
     --seq-450: #2a78d6;
     --seq-550: #1c5cab;
@@ -26,6 +27,7 @@
     --tile-critical-bg: #fceeee;
     --tile-aqua-bg:     #e9f9f2;
     --tile-warn-bg:     #fdf1e8;
+    --tile-waitlist-bg: #fdf4e6;
     --hairline:       rgba(11,11,11,0.07);
   }
   @media (prefers-color-scheme: dark) {
@@ -43,6 +45,7 @@
       --status-good:      #0ca30c;
       --status-good-text: #0ca30c;
       --status-critical:  #e66767;
+      --status-waitlist:  #d79a4a;
       --seq-350: #256abf;
       --seq-450: #3987e5;
       --seq-550: #5598e7;
@@ -50,6 +53,7 @@
       --tile-critical-bg: #2a1c1c;
       --tile-aqua-bg:     #12241c;
       --tile-warn-bg:     #2a2016;
+      --tile-waitlist-bg: #271f12;
       --hairline:       rgba(255,255,255,0.09);
     }
   }
@@ -231,14 +235,15 @@
       </div>
 
       <div class="tile" style="background:var(--tile-good-bg);border-top-color:var(--status-good);">
-        <div class="label"><span class="swatch" style="background:var(--status-good);"></span>To accept</div>
-        <div class="value" id="v-accept">&mdash;</div>
-        <div class="people" id="p-accept"></div>
+        <div class="label"><span class="swatch" style="background:var(--status-good);"></span>Accepted</div>
+        <div class="value" id="v-accepted">&mdash;</div>
+        <div class="people" id="p-accepted"></div>
       </div>
 
-      <div class="tile" style="background:var(--tile-critical-bg);border-top-color:var(--status-critical);">
-        <div class="label"><span class="swatch" style="background:var(--status-critical);"></span>To reject</div>
-        <div class="value" id="v-reject">&mdash;</div>
+      <div class="tile" style="background:var(--tile-waitlist-bg);border-top-color:var(--status-waitlist);">
+        <div class="label"><span class="swatch" style="background:var(--status-waitlist);"></span>Waitlisted</div>
+        <div class="value" id="v-waitlist">&mdash;</div>
+        <div class="people" id="p-waitlist"></div>
       </div>
     </div>
 
@@ -313,6 +318,15 @@
     return day + ', ' + time;
   }
 
+  // The right-hand label on a name row. Interview tiles carry a scheduled
+  // date; the waitlist carries the Elo score, since that's how the list is
+  // ranked and worked through.
+  function rowLabel(person) {
+    if (person.when) return formatWhen(person.when);
+    if (person.elo !== undefined && person.elo !== null) return 'Elo ' + person.elo;
+    return '';
+  }
+
   // Renders a list of people into a tile. Shows VISIBLE_NAMES, then a
   // "+N more" button that expands the rest in place.
   function renderPeople(containerId, list) {
@@ -341,11 +355,11 @@
       who.textContent = person.name;
       el.appendChild(who);
 
-      var when = formatWhen(person.when);
-      if (when) {
+      var label = rowLabel(person);
+      if (label) {
         var w = document.createElement('span');
         w.className = 'when';
-        w.textContent = when;
+        w.textContent = label;
         el.appendChild(w);
       }
       return el;
@@ -386,14 +400,15 @@
         document.getElementById('v-up1').textContent = data.upcoming1st;
         document.getElementById('v-up2').textContent = data.upcoming2nd;
         document.getElementById('v-post2').textContent = data.post2ndDecide;
-        document.getElementById('v-accept').textContent = data.toAccept;
-        document.getElementById('v-reject').textContent = data.toReject;
+        document.getElementById('v-accepted').textContent = data.accepted;
+        document.getElementById('v-waitlist').textContent = data.waitlisted;
 
         var people = data.people || {};
         renderPeople('p-up1', people.upcoming1st);
         renderPeople('p-up2', people.upcoming2nd);
         renderPeople('p-post2', people.post2ndDecide);
-        renderPeople('p-accept', people.toAccept);
+        renderPeople('p-accepted', people.accepted);
+        renderPeople('p-waitlist', people.waitlisted);
 
         var banner = document.getElementById('error-banner');
         banner.style.display = 'none';

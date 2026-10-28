@@ -25,6 +25,7 @@ const FINAL_STATUS_FIELD = 'Final Status';
 const FIRST_MEETING_STATUS_FIELD = '1st Meeting Status';
 const SENT_ACCEPTANCE_FIELD = 'Sent Acceptance';
 const STATUS_MAXIME_FIELD = 'Status Maxime';
+const MAXIME_CALL_FIELD = "Maxime/Dominika's Call";
 
 // Fields used to put names (and a LinkedIn link) on the person-level tiles.
 const FIRST_NAME_FIELD = 'first_name';
@@ -170,9 +171,11 @@ module.exports = async (req, res) => {
     // silently pull in founders from previous cohorts.
     const acceptedFormula = `AND({${SENT_ACCEPTANCE_FIELD}} = 1, {${STATUS_MAXIME_FIELD}} != "Desist", {${STATUS_MAXIME_FIELD}} != "duplicate", {${FINAL_STATUS_FIELD}} != "Desisted", {${FINAL_STATUS_FIELD}} != "Declined")`;
 
-    // "Waitlisted" — Final Status is Waitlist. Returned ranked by Elo, which
-    // is the order the list actually gets worked through.
-    const waitlistedFormula = `{${FINAL_STATUS_FIELD}} = "Waitlist"`;
+    // "Waitlisted" — the verdict lives on Maxime/Dominika's Call, NOT on
+    // Final Status (which stays blank for waitlisted founders). This is the
+    // same condition the "Waitlisted" view uses. Returned ranked by Elo,
+    // which is the order the list actually gets worked through.
+    const waitlistedFormula = `{${MAXIME_CALL_FIELD}} = "Waitlist"`;
 
     const [
       newThisWeek,
